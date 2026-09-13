@@ -1,0 +1,44 @@
+name: Nike Stock Checker
+
+on:
+  schedule:
+    # Runs at the top of every hour. GitHub Actions cron is UTC and times
+    # can slip by a few minutes under load — that's fine for this purpose.
+    - cron: "0 * * * *"
+  workflow_dispatch: {}   # lets you also trigger it manually from the Actions tab
+
+jobs:
+  check-stock:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed so the job can commit the state file back
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run stock checker
+        env:
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
+          ALERT_TO_EMAIL: ${{ secrets.ALERT_TO_EMAIL }}
+        run: python nike_stock_checker_actions.py
+
+      - name: Save "already alerted" state back to the repo
+        run: |
+          git config user.name "nike-stock-checker-bot"
+          git config user.email "actions@github.com"
+          if ! git diff --quiet -- nike_checker_state.json; then
+            git add nike_checker_state.json
+            git commit -m "Update stock-check state [skip ci]"
+            git push
+          else
+            echo "No state change, nothing to commit."
+          fi
